@@ -2,6 +2,7 @@
 
 #include <string>
 #include <stdexcept>
+#include <sstream>
 #include <vector>
 #include <stack>
 #include <unordered_map>
@@ -21,63 +22,10 @@ class Lexer {
         stack<int> indentationStack;
         vector<Token> tokens;
         unordered_map<string, TokenType> keywords;
+        unordered_map<string, char> morse;
 
         int line = 1;
         int column = 1;
-
-        void initializeKeywords(){
-            keywords["-.-. --.-"] = TokenType::FUNCTION_DEFINE;
-            keywords["-.. ."] = TokenType::FUNCTION_NAME;
-            keywords["-.-"] = TokenType::FUNCTION_END;
-            keywords[".-. .--. -"] = TokenType::REPORT;
-            keywords["-.-. .-.."] = TokenType::FUNCTION_TERMINATE;
-            keywords["-.-...."] = TokenType::START_CALL;
-            keywords["-.--."] = TokenType::END_CALL;
-            keywords["-. .-."] = TokenType::INTEGER;
-            keywords["-.. . -.-."] = TokenType::DECIMAL;
-            keywords["-... --- --- .-.."] = TokenType::BOOLEAN;
-            keywords["-.-. .... .- .-."] = TokenType::CHARACTER;
-            keywords["- -..- -"] = TokenType::STRING;
-            keywords["-. .. .-.."] = TokenType::VOID;
-            keywords["-.-."] = TokenType::TRUE;
-            keywords["-."] = TokenType::FALSE;
-            keywords[".. ..-."] = TokenType::IF;
-            keywords[". .-.. .. ..-."] = TokenType::ELIF;
-            keywords[". .-.. ... ."] = TokenType::ELSE;
-            keywords["-- .... .- .-.. ."] = TokenType::WHILE;
-            keywords["--. ---"] = TokenType::CONTINUE;
-            keywords["...-.-"] = TokenType::BREAK;
-            keywords["..-. --- .-."] = TokenType::FOR;
-            keywords[".. ..."] = TokenType::COMPARISON_START;
-            keywords["..--.."] = TokenType::COMPARISON_END;
-            keywords[". ..."] = TokenType::AND;
-            keywords["--- .-."] = TokenType::OR;
-            keywords["-. ---"] = TokenType::NOT;
-            keywords["-. ..--.."] = TokenType::GREATER;
-            keywords["-. -...-"] = TokenType::GREATER_EQUAL;
-            keywords["... ..--.."] = TokenType::LESSER;
-            keywords["... -...-"] = TokenType::LESSER_EQUAL;
-            keywords["-. --- -...-"] = TokenType::INEQUALITY;
-            keywords["-...-"] = TokenType::EQUALITY;
-            keywords["-. .--"] = TokenType::ARITHMETIC_START;
-            keywords[".-.-.-"] = TokenType::ARITHMETIC_END;
-            keywords[".-.-."] = TokenType::ADD;
-            keywords["-....-"] = TokenType::SUBTRACT;
-            keywords[".-.-. .-.-."] = TokenType::INCREMENT;
-            keywords["-....- -....-"] = TokenType::DECREMENT;
-            keywords["-..-"] = TokenType::MULTIPLY;
-            keywords["-..-."] = TokenType::DIVIDE;
-            keywords[".-.- -...-"] = TokenType::COMPOUND_ADD;
-            keywords["-....- -...-"] = TokenType::COMPOUND_SUBTRACT;
-            keywords["-..- -...-"] = TokenType::COMPOUND_MULTIPLY;
-            keywords["-..-. -...-"] = TokenType::COMPOUND_DIVIDE;
-            keywords[". ... -...-"] = TokenType::COMPOUND_AND;
-            keywords["--- .-. -...-"] = TokenType::COMPOUND_OR;
-            keywords[".-..."] = TokenType::WAIT;
-            keywords[".-. -..-"] = TokenType::INPUT;
-            keywords["- -..-"] = TokenType::OUTPUT;
-            keywords["-- ... --."] = TokenType::IO_CONVERT;
-        }
 
         bool isAtEnd(int lookahead = 0) const {
             return position + lookahead >= source.size();
@@ -161,6 +109,23 @@ class Lexer {
             return token;
         }
 
+        string scanIdentifier(string identifier){
+            string result = "";
+            string morseLetter;
+
+            istringstream stream(identifier);
+            while (stream >> morseLetter){
+                auto it = morse.find(morseLetter);
+                if (it != morse.end()){
+                    result += it -> second;
+                }
+                else {
+                    throwError("Invalid Morse character in identifier");
+                }
+            }
+            return result;
+        }
+
         void scanTokens(){
             while (!isAtEnd()){
                 if (column == 1){
@@ -178,6 +143,13 @@ class Lexer {
                 }
                 else if (peek() == '.' || peek () == '-'){
                     string letter = scanMorseToken();
+                    auto it = keywords.find(letter);
+                    if (it != keywords.end()){
+                        tokens.push_back(Token{it->second, letter, line, column});
+                    }
+                    else {
+                        tokens.push_back(Token{TokenType::IDENTIFIER, scanIdentifier(letter), line, column});
+                    }
                 }
                 else {
                     advance();
@@ -190,6 +162,90 @@ class Lexer {
             tokens.push_back(Token{TokenType::EOF_TOKEN, "", line, column});
         }
 
+        void initializeKeywords(){
+            keywords["-.-. --.-"] = TokenType::FUNCTION_DEFINE;
+            keywords["-.. ."] = TokenType::FUNCTION_NAME;
+            keywords["-.-"] = TokenType::FUNCTION_END;
+            keywords[".-. .--. -"] = TokenType::REPORT;
+            keywords["-.-. .-.."] = TokenType::FUNCTION_TERMINATE;
+            keywords["-.-...."] = TokenType::START_CALL;
+            keywords["-.--."] = TokenType::END_CALL;
+            keywords["-. .-."] = TokenType::INTEGER;
+            keywords["-.. . -.-."] = TokenType::DECIMAL;
+            keywords["-... --- --- .-.."] = TokenType::BOOLEAN;
+            keywords["-.-. .... .- .-."] = TokenType::CHARACTER;
+            keywords["- -..- -"] = TokenType::STRING;
+            keywords["-. .. .-.."] = TokenType::VOID;
+            keywords["-.-."] = TokenType::TRUE;
+            keywords["-."] = TokenType::FALSE;
+            keywords[".. ..-."] = TokenType::IF;
+            keywords[". .-.. .. ..-."] = TokenType::ELIF;
+            keywords[". .-.. ... ."] = TokenType::ELSE;
+            keywords["-- .... .- .-.. ."] = TokenType::WHILE;
+            keywords["--. ---"] = TokenType::CONTINUE;
+            keywords["...-.-"] = TokenType::BREAK;
+            keywords["..-. --- .-."] = TokenType::FOR;
+            keywords[".. ..."] = TokenType::COMPARISON_START;
+            keywords["..--.."] = TokenType::COMPARISON_END;
+            keywords[". ..."] = TokenType::AND;
+            keywords["--- .-."] = TokenType::OR;
+            keywords["-. ---"] = TokenType::NOT;
+            keywords["-. ..--.."] = TokenType::GREATER;
+            keywords["-. -...-"] = TokenType::GREATER_EQUAL;
+            keywords["... ..--.."] = TokenType::LESSER;
+            keywords["... -...-"] = TokenType::LESSER_EQUAL;
+            keywords["-. --- -...-"] = TokenType::INEQUALITY;
+            keywords["-...-"] = TokenType::EQUALITY;
+            keywords["-. .--"] = TokenType::ARITHMETIC_START;
+            keywords[".-.-.-"] = TokenType::ARITHMETIC_END;
+            keywords[".-.-."] = TokenType::ADD;
+            keywords["-....-"] = TokenType::SUBTRACT;
+            keywords[".-.-. .-.-."] = TokenType::INCREMENT;
+            keywords["-....- -....-"] = TokenType::DECREMENT;
+            keywords["-..-"] = TokenType::MULTIPLY;
+            keywords["-..-."] = TokenType::DIVIDE;
+            keywords[".-.- -...-"] = TokenType::COMPOUND_ADD;
+            keywords["-....- -...-"] = TokenType::COMPOUND_SUBTRACT;
+            keywords["-..- -...-"] = TokenType::COMPOUND_MULTIPLY;
+            keywords["-..-. -...-"] = TokenType::COMPOUND_DIVIDE;
+            keywords[". ... -...-"] = TokenType::COMPOUND_AND;
+            keywords["--- .-. -...-"] = TokenType::COMPOUND_OR;
+            keywords[".-..."] = TokenType::WAIT;
+            keywords[".-. -..-"] = TokenType::INPUT;
+            keywords["- -..-"] = TokenType::OUTPUT;
+            keywords["-- ... --."] = TokenType::IO_CONVERT;
+        }
+
+        void initializeMorse(){
+            morse[".-"] = 'A';
+            morse["-..."] = 'B';
+            morse["-.-."] = 'C';
+            morse["-.."] = 'D';
+            morse["."] = 'E';
+            morse["..-."] = 'F';
+            morse["--."] = 'G';
+            morse["...."] = 'H';
+            morse[".."] = 'I';
+            morse[".---"] = 'J';
+            morse["-.-"] = 'K';
+            morse[".-.."] = 'L';
+            morse["--"] = 'M';
+            morse["---"] = 'O';
+            morse[".--."] = 'P';
+            morse["--.-"] = 'Q';
+            morse[".-."] = 'R';
+            morse["..."] = 'S';
+            morse["---"] = 'O';
+            morse["-"] = 'T';
+            morse["..-"] = 'U';
+            morse["...-"] = 'V';
+            morse[".--"] = 'W';
+            morse["-..-"] = 'X';
+            morse["-.--"] = 'Y';
+            morse["--.."] = 'Z';
+        }
+
+
         void throwError(string message){
             throw runtime_error(message + ": Line " + to_string(line) + ", Col " + to_string(column));
         }
@@ -198,6 +254,7 @@ class Lexer {
         Lexer(const string & input) : source(input) {
             indentationStack.push(0);
             initializeKeywords();
+            initializeMorse();
             scanTokens();
         }
         
