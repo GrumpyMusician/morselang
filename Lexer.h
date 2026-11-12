@@ -6,6 +6,8 @@
 #include <vector>
 #include <stack>
 #include <unordered_map>
+#include <tuple>
+#include <variant>
 
 #include "Token.h"
 
@@ -23,6 +25,7 @@ class Lexer {
         vector<Token> tokens;
         unordered_map<string, TokenType> keywords;
         unordered_map<string, char> morse;
+        unordered_map<char, char> numberShorthands;
 
         int line = 1;
         int column = 1;
@@ -34,6 +37,7 @@ class Lexer {
         void handleIndentation();
         void handleIndentationChange();
         string scanMorseToken();
+        tuple<TokenType, variant<int, double, char, bool, string>> identifyMorse(string);
         string scanIdentifier(string);
         void scanTokens();
         void initializeKeywords();
@@ -154,6 +158,71 @@ string Lexer::scanIdentifier(string identifier){
     return result;
 }
 
+tuple<TokenType, variant<int, double, char, bool, string>> Lexer::identifyMorse(string morseSequence){
+    string parseValue = "";
+    
+    istringstream stream(morseSequence);
+    vector<char> morseParsed;
+    string morseChar;
+
+    while (stream >> morseChar){
+        auto it = morse.find(morseChar);
+        if (it != morse.end()){
+            morseParsed.push_back(it -> second);
+        }
+    }
+
+    if (morseParsed.size() == 0){
+        return {Token{TokenType::IDENTIFIER, scanIdentifier(letter), line, column}, false};
+    }
+
+    if (isdigit(morseParsed.at(0))){
+        // Allow for number shorthands
+        string type = "INTEGER";
+        for (int i = 0; i < morseParsed.size(); i++){
+            if (morseParsed.at(i) == '.'){
+                type = "DECIMAL";
+            }
+            if (!isdigit(morseParsed.at(i))){
+                if (numberShorthands.find(morseParsed.at(i)) != numberShorthands.end()) {
+                    parseValue += numberShorthands.at(morseParsed.at(i));
+                } else {
+                    throwError("Invalid integer or decimal assignment");
+                }
+            } else {
+                parseValue += morseParsed.at(i);
+            }
+        }
+        if (type == "INTEGER"){
+            return {type, stoi(parseValue)};
+        } else {
+            return {type, stod(parseValue)};
+        }
+    }
+    else if (morseParsed.at(0) == '"'){
+        return {"STRING", true};
+        // TODO: Keep moving pointer until finding ending quotes (close string) or newline (throw error) 
+    }
+    else if (morseParsed.at(0) == '\''){
+        if (morseParsed.size() != 3 || morseParsed.at(2) != '\''){
+            throwError("Invalid character assignment.");
+        }
+        return {"CHARACTER", morseParsed.at(1)};
+    }
+    else if (morseParsed.size() == 1){
+        if (morseParsed.at(0) == 'C'){
+            return {"BOOLEAN", true};
+        }
+        else if (morseParsed.at(0) == 'N'){
+            return {"BOOLEAN", false};
+        }
+        throwError("Invalid Boolean Value");
+    }
+    else {
+        return {"IDENTIFIER", true};
+    }
+}
+
 void Lexer::scanTokens(){
     while (!isAtEnd()){
         if (column == 1){
@@ -173,7 +242,7 @@ void Lexer::scanTokens(){
             string letter = scanMorseToken();
             auto it = keywords.find(letter);
             if (it != keywords.end()){
-                tokens.push_back(Token{it->second, letter, line, column});
+                tokens.push_back(Token{it -> second, letter, line, column});
             }
             else {
                 tokens.push_back(Token{TokenType::IDENTIFIER, scanIdentifier(letter), line, column});
@@ -271,6 +340,25 @@ void Lexer::initializeMorse(){
     morse["-..-"] = 'X';
     morse["-.--"] = 'Y';
     morse["--.."] = 'Z';
+    morse[".----"] = '1';
+    morse["..---"] = '2';
+    morse["...--"] = '3';
+    morse["....-"] = '4';
+    morse["....."] = '5';
+    morse["-...."] = '6';
+    morse["--..."] = '7';
+    morse["---.."] = '8';
+    morse["----."] = '9';
+    morse["-----"] = '0';
+
+    numberShorthands['T'] = '0';
+    numberShorthands['A'] = '1';
+    numberShorthands['U'] = '2';
+    numberShorthands['V'] = '3';
+    numberShorthands['E'] = '5';
+    numberShorthands['B'] = '7';
+    numberShorthands['D'] = '8';
+    numberShorthands['N'] = '9';
 }
 
 void Lexer::throwError(string message){
