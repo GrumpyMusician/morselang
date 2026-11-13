@@ -6,8 +6,6 @@
 #include <vector>
 #include <stack>
 #include <unordered_map>
-#include <tuple>
-#include <variant>
 
 #include "Token.h"
 
@@ -25,7 +23,7 @@ class Lexer {
         vector<Token> tokens;
         unordered_map<string, TokenType> keywords;
         unordered_map<string, char> morse;
-        unordered_map<char, char> numberShorthands;
+        unordered_map<char, char> numShorthands;
 
         int line = 1;
         int column = 1;
@@ -37,7 +35,9 @@ class Lexer {
         void handleIndentation();
         void handleIndentationChange();
         string scanMorseToken();
-        tuple<TokenType, variant<int, double, char, bool, string>> identifyMorse(string);
+        string getEscapeSequence(char);
+        string scanString();
+        Token identifyMorse(string);
         string scanIdentifier(string);
         void scanTokens();
         void initializeKeywords();
@@ -141,85 +141,94 @@ string Lexer::scanMorseToken(){
     return token;
 }
 
-string Lexer::scanIdentifier(string identifier){
-    string result = "";
-    string morseLetter;
-
-    istringstream stream(identifier);
-    while (stream >> morseLetter){
-        auto it = morse.find(morseLetter);
-        if (it != morse.end()){
-            result += it -> second;
-        }
-        else {
-            throwError("Invalid Morse character in identifier");
-        }
+string Lexer::getEscapeSequence(char morseChar){
+    switch (morseChar){
+        case 'N':
+            return "\n";
+        case 'T':
+            return "\t";
+        case '@':
+            return "@";
+        default:
+            throwError("Invalid escape sequence.");
     }
-    return result;
 }
 
-tuple<TokenType, variant<int, double, char, bool, string>> Lexer::identifyMorse(string morseSequence){
+string Lexer::scanString(){
+    
+}
+
+Token Lexer::identifyMorse(string morseSequence){
+    istringstream read(morseSequence);
+    string morseChar;
+    string decodedMorse = "";
     string parseValue = "";
     
-    istringstream stream(morseSequence);
-    vector<char> morseParsed;
-    string morseChar;
-
-    while (stream >> morseChar){
+    while (read >> morseChar){
         auto it = morse.find(morseChar);
         if (it != morse.end()){
-            morseParsed.push_back(it -> second);
+            decodedMorse += it -> second;
+        }
+        else {
+            throwError("Invalid Morse Sequence");
         }
     }
 
-    if (morseParsed.size() == 0){
-        return {Token{TokenType::IDENTIFIER, scanIdentifier(letter), line, column}, false};
-    }
-
-    if (isdigit(morseParsed.at(0))){
-        // Allow for number shorthands
-        string type = "INTEGER";
-        for (int i = 0; i < morseParsed.size(); i++){
-            if (morseParsed.at(i) == '.'){
-                type = "DECIMAL";
-            }
-            if (!isdigit(morseParsed.at(i))){
-                if (numberShorthands.find(morseParsed.at(i)) != numberShorthands.end()) {
-                    parseValue += numberShorthands.at(morseParsed.at(i));
-                } else {
-                    throwError("Invalid integer or decimal assignment");
+    if (isdigit(decodedMorse[0])){
+        bool isInt = true;
+        for (int i = 0; i < decodedMorse.size(); i++){
+            if (isalpha(decodedMorse[i])){
+                auto it = numShorthands.find(decodedMorse[i]);
+                if (it != numShorthands.end()){
+                    decodedMorse[i] = it -> second;
                 }
-            } else {
-                parseValue += morseParsed.at(i);
+                else {
+                    throwError("Invalid number");
+                }
+            }
+            else if (isdigit(decodedMorse[i])){
+                continue;
+            }
+            else if (decodedMorse[i] == '.' && isInt == true){
+                isInt = false;
+            }
+            else {
+                throwError("Invalid number");
             }
         }
-        if (type == "INTEGER"){
-            return {type, stoi(parseValue)};
+        if (isInt){
+            return Token{TokenType::INTEGER, decodedMorse, line, column};
         } else {
-            return {type, stod(parseValue)};
+            return Token{TokenType::DECIMAL, decodedMorse, line, column};
         }
     }
-    else if (morseParsed.at(0) == '"'){
-        return {"STRING", true};
-        // TODO: Keep moving pointer until finding ending quotes (close string) or newline (throw error) 
-    }
-    else if (morseParsed.at(0) == '\''){
-        if (morseParsed.size() != 3 || morseParsed.at(2) != '\''){
-            throwError("Invalid character assignment.");
+    else if (isalpha(decodedMorse[0])){
+        // Identifier
+        for (int i = 1; i < decodedMorse.size(); i++){
+            if (!isalnum(decodedMorse[i])){
+                throwError("Invalid identifier");
+            }
         }
-        return {"CHARACTER", morseParsed.at(1)};
+        return Token{TokenType::IDENTIFIER, decodedMorse, line, column};
     }
-    else if (morseParsed.size() == 1){
-        if (morseParsed.at(0) == 'C'){
-            return {"BOOLEAN", true};
-        }
-        else if (morseParsed.at(0) == 'N'){
-            return {"BOOLEAN", false};
-        }
-        throwError("Invalid Boolean Value");
-    }
+
     else {
-        return {"IDENTIFIER", true};
+        switch(decodedMorse[0]){
+            case '\'':
+                if (decodedMorse.size() == 4 && decodedMorse[1] == '@' && decodedMorse[3] == '\''){
+                    return Token{TokenType::CHARACTER, getEscapeSequence(decodedMorse[2]), line, column};
+                } else if (decodedMorse.size() == 3 && decodedMorse[2] == '\'') {
+                    return Token{TokenType::CHARACTER, string(1, decodedMorse[1]), line, column};
+                } else {
+                    throwError("Invalid character");
+                }
+                break;
+            case '"':
+                // String
+                break;
+            default:
+                throwError("Error reading morse token");
+        }
     }
 }
 
@@ -351,14 +360,18 @@ void Lexer::initializeMorse(){
     morse["----."] = '9';
     morse["-----"] = '0';
 
-    numberShorthands['T'] = '0';
-    numberShorthands['A'] = '1';
-    numberShorthands['U'] = '2';
-    numberShorthands['V'] = '3';
-    numberShorthands['E'] = '5';
-    numberShorthands['B'] = '7';
-    numberShorthands['D'] = '8';
-    numberShorthands['N'] = '9';
+    morse[".-..-."] = '"';
+    morse[".----."] = '\'';
+    morse[".--.-."] = '@';
+
+    numShorthands['T'] = '0';
+    numShorthands['A'] = '1';
+    numShorthands['U'] = '2';
+    numShorthands['V'] = '3';
+    numShorthands['E'] = '5';
+    numShorthands['B'] = '7';
+    numShorthands['D'] = '8';
+    numShorthands['N'] = '9';
 }
 
 void Lexer::throwError(string message){
