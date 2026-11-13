@@ -213,6 +213,7 @@ Token Lexer::identifyMorse(string morseSequence){
     }
 
     else {
+        string morseString = "";
         switch(decodedMorse[0]){
             case '\'':
                 if (decodedMorse.size() == 4 && decodedMorse[1] == '@' && decodedMorse[3] == '\''){
@@ -224,8 +225,15 @@ Token Lexer::identifyMorse(string morseSequence){
                 }
                 break;
             case '"':
-                // String
-                break;
+                morseString += decodedMorse;
+                while (morseString[morseString.length() - 1] != '"'){
+                    morseString += advance();
+                    if (morseString[morseString.length() - 1] == '\n'){
+                        throwError("Incomplete string");
+                    }
+                }
+                morseString = (morseString.length() > 2) ? morseString.substr(1, morseString.length() - 2) : "";
+                return Token{TokenType::STRING, morseString, line, column};
             default:
                 throwError("Error reading morse token");
         }
@@ -296,9 +304,9 @@ void Lexer::initializeKeywords(){
     keywords[". ..."] = TokenType::AND;
     keywords["--- .-."] = TokenType::OR;
     keywords["-. ---"] = TokenType::NOT;
-    keywords["-. ..--.."] = TokenType::GREATER;
+    keywords["-. ---..."] = TokenType::GREATER;
     keywords["-. -...-"] = TokenType::GREATER_EQUAL;
-    keywords["... ..--.."] = TokenType::LESSER;
+    keywords["... ---..."] = TokenType::LESSER;
     keywords["... -...-"] = TokenType::LESSER_EQUAL;
     keywords["-. --- -...-"] = TokenType::INEQUALITY;
     keywords["-...-"] = TokenType::EQUALITY;
