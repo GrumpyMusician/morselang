@@ -36,9 +36,7 @@ class Lexer {
         void handleIndentationChange();
         string scanMorseToken();
         string getEscapeSequence(char);
-        string scanString();
         Token identifyMorse(string);
-        string scanIdentifier(string);
         void scanTokens();
         void initializeKeywords();
         void initializeMorse();
@@ -59,6 +57,17 @@ vector<Token> Lexer::getTokens(){
     return tokens;
 }
 
+bool Lexer::isAtEnd(int lookahead = 0) const {
+    return position + lookahead >= source.size();
+}
+
+char Lexer::peek(int lookahead = 0) const {
+    if (isAtEnd(lookahead)){
+        return '\0';
+    }
+    return source[position + lookahead];
+}
+
 char Lexer::advance() {
     if (!isAtEnd()){
         if (source[position] == '\n'){
@@ -72,17 +81,6 @@ char Lexer::advance() {
         return source[position - 1];
     }
     return '\0';
-}
-
-bool Lexer::isAtEnd(int lookahead = 0) const {
-    return position + lookahead >= source.size();
-}
-
-char Lexer::peek(int lookahead = 0) const {
-    if (isAtEnd(lookahead)){
-        return '\0';
-    }
-    return source[position + lookahead];
 }
 
 bool Lexer::handleSpaces(){
@@ -154,10 +152,6 @@ string Lexer::getEscapeSequence(char morseChar){
     }
 }
 
-string Lexer::scanString(){
-    
-}
-
 Token Lexer::identifyMorse(string morseSequence){
     istringstream read(morseSequence);
     string morseChar;
@@ -172,6 +166,10 @@ Token Lexer::identifyMorse(string morseSequence){
         else {
             throwError("Invalid Morse Sequence");
         }
+    }
+
+    if (decodedMorse.empty()){
+        throwError("Empty Morse token");
     }
 
     if (isdigit(decodedMorse[0])){
@@ -224,16 +222,85 @@ Token Lexer::identifyMorse(string morseSequence){
                     throwError("Invalid character");
                 }
                 break;
-            case '"':
-                morseString += decodedMorse;
-                while (morseString[morseString.length() - 1] != '"'){
-                    morseString += advance();
-                    if (morseString[morseString.length() - 1] == '\n'){
+            case '"': {
+                string currentMorse = "";
+                bool escaped = false;
+                bool closed = false;
+
+                auto decodeCurrentMorse = [&]() {
+                    if (currentMorse.empty()){
+                        return;
+                    }
+                    auto it = morse.find(currentMorse);
+                    if (it == morse.end()){
+                        throwError("Invalid Morse sequence in string");
+                    }
+                    char decoded = it->second;
+                    currentMorse.clear();
+                    if (escaped){
+                        morseString += getEscapeSequence(decoded);
+                        escaped = false;
+                    }
+                    else if (decoded == '@'){
+                        escaped = true;
+                    }
+                    else {
+                        morseString += decoded;
+                    }
+                };
+
+                while (!isAtEnd()){
+                    char current = peek();
+                    if (current == '\n'){
                         throwError("Incomplete string");
                     }
+                    else if (current == '.' || current == '-'){
+                        currentMorse += advance();
+                        if (currentMorse == ".-..-."){
+                            if (escaped){
+                                throwError("Invalid escape sequence");
+                            }
+                            closed = true;
+                            break;
+                        }
+                    }
+                    else if (current == ' '){
+                        int count = 0;
+
+                        while (peek() == ' '){
+                            advance();
+                            count++;
+                        }
+                        decodeCurrentMorse();
+                        if (count >= 2){
+                            if (escaped){
+                                throwError("Invalid escape sequence");
+                            }
+                            morseString += ' ';
+                        }
+                    }
+
+                    else if (current == '\t'){
+                        advance();
+                        decodeCurrentMorse();
+
+                        if (escaped){
+                            throwError("Invalid escape sequence");
+                        }
+                        morseString += ' ';
+                    }
+
+                    else {
+                        throwError("Invalid character in string");
+                    }
                 }
-                morseString = (morseString.length() > 2) ? morseString.substr(1, morseString.length() - 2) : "";
+
+                if (!closed){
+                    throwError("Incomplete string");
+                }
+
                 return Token{TokenType::STRING, morseString, line, column};
+            }
             default:
                 throwError("Error reading morse token");
         }
@@ -246,7 +313,7 @@ void Lexer::scanTokens(){
             handleIndentation();
         }
         if (peek() == ' '){
-            bool spaceType = handleSpaces(); // False = Space, True = Token Seperator (Tab)
+            handleSpaces();
         }
         else if (peek() == '\t'){
             advance();
@@ -259,14 +326,16 @@ void Lexer::scanTokens(){
             string letter = scanMorseToken();
             auto it = keywords.find(letter);
             if (it != keywords.end()){
-                tokens.push_back(Token{it -> second, letter, line, column});
+                tokens.push_back(Token{it -> second, "", line, column});
             }
             else {
-                tokens.push_back(Token{TokenType::IDENTIFIER, scanIdentifier(letter), line, column});
+                tokens.push_back(identifyMorse(letter));
             }
         }
         else {
-            advance();
+            while (peek() != '\n' && !isAtEnd()){
+                advance();
+            }
         }
     }
     while (indentationStack.top() != 0){
@@ -284,12 +353,12 @@ void Lexer::initializeKeywords(){
     keywords["-.-. .-.."] = TokenType::FUNCTION_TERMINATE;
     keywords["-.-...."] = TokenType::START_CALL;
     keywords["-.--."] = TokenType::END_CALL;
-    keywords["-. .-."] = TokenType::INTEGER;
-    keywords["-.. . -.-."] = TokenType::DECIMAL;
-    keywords["-... --- --- .-.."] = TokenType::BOOLEAN;
-    keywords["-.-. .... .- .-."] = TokenType::CHARACTER;
-    keywords["- -..- -"] = TokenType::STRING;
-    keywords["-. .. .-.."] = TokenType::VOID;
+    keywords["-. .-."] = TokenType::DECLARE_INTEGER;
+    keywords["-.. . -.-."] = TokenType::DECLARE_DECIMAL;
+    keywords["-... --- --- .-.."] = TokenType::DECLARE_BOOLEAN;
+    keywords["-.-. .... .- .-."] = TokenType::DECLARE_CHARACTER;
+    keywords["- -..- -"] = TokenType::DECLARE_STRING;
+    keywords["-. .. .-.."] = TokenType::DECLARE_VOID;
     keywords["-.-."] = TokenType::TRUE;
     keywords["-."] = TokenType::FALSE;
     keywords[".. ..-."] = TokenType::IF;
@@ -344,12 +413,12 @@ void Lexer::initializeMorse(){
     morse["-.-"] = 'K';
     morse[".-.."] = 'L';
     morse["--"] = 'M';
+    morse["-."] = 'N';
     morse["---"] = 'O';
     morse[".--."] = 'P';
     morse["--.-"] = 'Q';
     morse[".-."] = 'R';
     morse["..."] = 'S';
-    morse["---"] = 'O';
     morse["-"] = 'T';
     morse["..-"] = 'U';
     morse["...-"] = 'V';
@@ -367,6 +436,18 @@ void Lexer::initializeMorse(){
     morse["---.."] = '8';
     morse["----."] = '9';
     morse["-----"] = '0';
+
+    morse[".-.-.-"] = '.';
+    morse["--..--"] = ',';
+    morse["---..."] = ':';
+    morse["..--.."] = '?';
+    morse["-....-"] = '-';
+    morse["-..-."] = '/';
+    morse["-.--."] = '(';
+    morse["-.--.-"] = ')';
+    morse["-...-"] = '=';
+    morse[".-.-."] = '+';
+    morse["-..-"] = '*';
 
     morse[".-..-."] = '"';
     morse[".----."] = '\'';
