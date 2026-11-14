@@ -78,8 +78,7 @@ enum class TokenType{
     // BUILT-IN OPERATIONS AND ITS MODIFIERS
     WAIT,
     INPUT,
-    OUTPUT,
-    IO_CONVERT
+    OUTPUT
 
 };
 

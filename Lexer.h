@@ -396,7 +396,6 @@ void Lexer::initializeKeywords(){
     keywords[".-..."] = TokenType::WAIT;
     keywords[".-. -..-"] = TokenType::INPUT;
     keywords["- -..-"] = TokenType::OUTPUT;
-    keywords["-- ... --."] = TokenType::IO_CONVERT;
 }
 
 void Lexer::initializeMorse(){
