@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include <string>
@@ -9,7 +10,7 @@
 
 using namespace std;
 
-enum class DataType{
+enum class DataType {
     INTEGER,
     DECIMAL,
     BOOLEAN,
@@ -51,33 +52,125 @@ struct BinaryExpression : Expression {
     unique_ptr<Expression> right;
 };
 
+struct UnaryExpression : Expression {
+    TokenType op;
+    unique_ptr<Expression> operand;
+};
+
+struct FunctionCall : Expression {
+    string name;
+    vector<unique_ptr<Expression>> arguments;
+};
+
 struct Statement {
     virtual ~Statement() = default;
 };
 
-struct VariableDeclaration : Statement{ 
+struct FunctionCallStatement : Statement {
+    unique_ptr<FunctionCall> call;
+};
+
+struct VariableDeclaration : Statement {
     DataType type;
     string name;
     unique_ptr<Expression> initializer = nullptr;
 };
 
-struct Assignment : Statement { 
+struct Assignment : Statement {
+    string name;
+    unique_ptr<Expression> value;
+};
+
+struct CompoundAddAssignment : Statement {
+    string name;
+    unique_ptr<Expression> value;
+};
+
+struct CompoundSubtractAssignment : Statement {
+    string name;
+    unique_ptr<Expression> value;
+};
+
+struct CompoundMultiplyAssignment : Statement {
+    string name;
+    unique_ptr<Expression> value;
+};
+
+struct CompoundDivideAssignment : Statement {
+    string name;
+    unique_ptr<Expression> value;
+};
+
+struct CompoundAndAssignment : Statement {
+    string name;
+    unique_ptr<Expression> value;
+};
+
+struct CompoundOrAssignment : Statement {
     string name;
     unique_ptr<Expression> value;
 };
 
 struct OutputStatement : Statement {
-    unique_ptr<Expression> expression;
+    vector<unique_ptr<Expression>> expressions;
+};
+
+struct IncrementStatement : Statement {
+    string name;
+};
+
+struct DecrementStatement : Statement {
+    string name;
 };
 
 struct InputStatement : Statement {
-    string name;
+    vector<string> names;
+};
+
+struct WaitStatement : Statement {
+    unique_ptr<Expression> duration;
 };
 
 struct ConditionalBranch {
     unique_ptr<Expression> condition;
     vector<unique_ptr<Statement>> body;
 };
+
+struct IfStatement : Statement {
+    ConditionalBranch ifBranch;
+    vector<ConditionalBranch> elifBranches;
+    optional<vector<unique_ptr<Statement>>> elseBody;
+};
+
+struct WhileStatement : Statement {
+    unique_ptr<Expression> condition;
+    vector<unique_ptr<Statement>> body;
+};
+
+struct ForStatement : Statement {
+    unique_ptr<Statement> initializer;
+    unique_ptr<Expression> condition;
+    unique_ptr<Statement> increment;
+    vector<unique_ptr<Statement>> body;
+};
+
+struct BreakStatement : Statement {};
+
+struct ContinueStatement : Statement {};
+
+struct Parameter {
+    DataType type;
+    string name;
+};
+
+struct FunctionDeclaration : Statement {
+    optional<DataType> returnType;
+    string name;
+    vector<Parameter> parameters;
+    vector<unique_ptr<Statement>> body;
+};
+
+struct FunctionTerminate : Statement {};
 
 struct Program {
     vector<unique_ptr<Statement>> statements;
